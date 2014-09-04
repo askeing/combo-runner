@@ -1,19 +1,11 @@
 #!/bin/bash
 
 GAIA_BRANCH=${GAIA_BRANCH:-"master"}
-DESKTOPB2G_DIR=${DESKTOPB2G_DIR:-""}
-DESKTOPB2G_BRANCH=${DESKTOPB2G_BRANCH:-"master"}
+B2G_GAIATEST_LOCAL_PORT=${B2G_GAIATEST_LOCAL_PORT:-2828}
 B2G_GAIATEST_TESTVARS=${B2G_GAIATEST_TESTVARS:-"testvars.json"}
 B2G_GAIATEST_TYPE=${B2G_GAIATEST_TYPE:-"b2g"}
 B2G_GAIATEST_TESTS=${B2G_GAIATEST_TESTS:-"gaiatest/tests/functional/manifest.ini"}
 B2G_GAIATEST_TIMEOUT=${B2G_GAIATEST_TIMEOUT:-30000}
-
-if [[ ${DESKTOPB2G_DIR} == "" ]] || [[ ! -d ${DESKTOPB2G_DIR}/b2g ]]; then
-    echo "There is no Desktop B2G under [${DESKTOPB2G_DIR}]! Stop."
-    exit 1
-else
-    echo "DESKTOPB2G_DIR is ${DESKTOPB2G_DIR}"
-fi
 
 ### Get the absolute path of testvars file
 B2G_GAIATEST_TESTVARS_PATH=`readlink -f ${B2G_GAIATEST_TESTVARS}`
@@ -23,9 +15,6 @@ if [[ ! -f ${B2G_GAIATEST_TESTVARS_PATH} ]]; then
 else
     echo "The testvars file is [${B2G_GAIATEST_TESTVARS_PATH}]."
 fi
-
-### Setup user.js for marionette
-echo "user_pref('marionette.force-local', true);" >> ${DESKTOPB2G_DIR}/b2g/gaia/profile/user.js
 
 ### Checkout the Gaiatest project
 if [[ -f common_check_gaia.sh ]]; then
@@ -46,11 +35,20 @@ rm -rf .env
 virtualenv .env
 source .env/bin/activate
 
+### wait for device
+adb wait-for-device
+### do port forwarding
+adb forward tcp:${B2G_GAIATEST_LOCAL_PORT} tcp:2828
+
 ### Setup gaiatest
 rm -rf gaiatest/atoms
 python setup.py develop
+pip install -Ur gaiatest/tests/requirements.txt
 
 ### Run gaiatest
 echo "Running gaiatest on desktop B2G, type [${B2G_GAIATEST_TYPE}], tests [${B2G_GAIATEST_TESTS}]..."
-gaiatest --app=b2gdesktop --binary=${DESKTOPB2G_DIR}/b2g/b2g-bin --profile=${DESKTOPB2G_DIR}/b2g/gaia/profile --testvars=${B2G_GAIATEST_TESTVARS_PATH} --restart --xml-output=results/result.xml --html-output=results/index.html --timeout=${B2G_GAIATEST_TIMEOUT} --type=${B2G_GAIATEST_TYPE} ${B2G_GAIATEST_TESTS}
+gaiatest --address=localhost:${B2G_GAIATEST_LOCAL_PORT} --testvars=${B2G_GAIATEST_TESTVARS_PATH} --xml-output=results/result.xml --html-output=results/index.html --restart --timeout=${B2G_GAIATEST_TIMEOUT} --type=${B2G_GAIATEST_TYPE} ${B2G_GAIATEST_TESTS}
+
+### reboot
+adb reboot
 
